@@ -9,23 +9,49 @@ use Illuminate\Support\Str;
 class MakeCrudCommand extends Command
 {
     protected $signature = 'make:crud {name} {--fields=}';
-    protected $description = 'Create CRUD operations for a model';
+    protected $description = 'Create CRUD operations for a model, including migrations, controllers, and views.';
 
     public function handle()
     {
         $name = $this->argument('name');
         $fields = $this->option('fields');
 
-        $this->createModel($name);
+        $this->createModel($name, $fields);
         $this->createMigration($name, $fields);
         $this->createController($name);
         $this->createViews($name);
         $this->info('CRUD for '.$name.' created successfully.');
     }
 
-    protected function createModel($name)
+    protected function createModel($name, $fields)
     {
-        Artisan::call('make:model', ['name' => $name, '-m' => true]);
+        Artisan::call('make:model', ['name' => $name]);
+
+        $modelPath = app_path("Models/{$name}.php");
+        $tableName = Str::plural(Str::snake($name));
+        $fillableFields = $this->getFillableFields($fields);
+
+        $modelTemplate = file_get_contents(resource_path('stubs/model.stub'));
+        $modelTemplate = str_replace(
+            ['{{modelName}}', '{{tableName}}', '{{fillable}}'],
+            [$name, $tableName, $fillableFields],
+            $modelTemplate
+        );
+
+        file_put_contents($modelPath, $modelTemplate);
+    }
+
+    protected function getFillableFields($fields)
+    {
+        $fieldsArray = explode(',', $fields);
+        $fillableArray = [];
+
+        foreach ($fieldsArray as $field) {
+            [$fieldName] = explode(':', $field);
+            $fillableArray[] = "'$fieldName'";
+        }
+
+        return implode(', ', $fillableArray);
     }
 
     protected function createMigration($name, $fields)
@@ -60,7 +86,21 @@ class MakeCrudCommand extends Command
 
     protected function createController($name)
     {
-        Artisan::call('make:controller', ['name' => $name . 'Controller']);
+        $controllerName = $name . 'Controller';
+        Artisan::call('make:controller', ['name' => $controllerName]);
+
+        $controllerPath = app_path("Http/Controllers/{$controllerName}.php");
+        $modelVariable = strtolower($name);
+        $modelName = $name;
+        $controllerTemplate = file_get_contents(resource_path('stubs/controller.stub'));
+
+        $controllerTemplate = str_replace(
+            ['{{controllerName}}', '{{modelName}}', '{{modelVariable}}'],
+            [$controllerName, $modelName, $modelVariable],
+            $controllerTemplate
+        );
+
+        file_put_contents($controllerPath, $controllerTemplate);
     }
 
     protected function createViews($name)
