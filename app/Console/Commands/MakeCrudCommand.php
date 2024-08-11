@@ -8,7 +8,7 @@ use Illuminate\Support\Str;
 
 class MakeCrudCommand extends Command
 {
-    protected $signature = 'make:crud {name} {--fields=}';
+    protected $signature = 'make:crud {name} {--fields=} {--relations=}';
     protected $description = 'Create CRUD operations for a model, including migrations, controllers, and views.';
 
     public function handle()
@@ -16,25 +16,28 @@ class MakeCrudCommand extends Command
         $name = $this->argument('name');
         $fields = $this->option('fields');
 
-        $this->createModel($name, $fields);
+        $relations = $this->option('relations');
+
+        $this->createModel($name, $fields, $relations);
         $this->createMigration($name, $fields);
         $this->createController($name);
         $this->createViews($name);
-        $this->info('CRUD for '.$name.' created successfully.');
+        $this->info('CRUD for ' . $name . ' created successfully.');
     }
 
-    protected function createModel($name, $fields)
+    protected function createModel($name, $fields, $relations)
     {
         Artisan::call('make:model', ['name' => $name]);
 
         $modelPath = app_path("Models/{$name}.php");
         $tableName = Str::plural(Str::snake($name));
         $fillableFields = $this->getFillableFields($fields);
+        $relationMethods = $this->getRelationMethods($relations);
 
         $modelTemplate = file_get_contents(resource_path('stubs/model.stub'));
         $modelTemplate = str_replace(
-            ['{{modelName}}', '{{tableName}}', '{{fillable}}'],
-            [$name, $tableName, $fillableFields],
+            ['{{modelName}}', '{{tableName}}', '{{fillable}}', '{{relations}}'],
+            [$name, $tableName, $fillableFields, $relationMethods],
             $modelTemplate
         );
 
@@ -52,6 +55,73 @@ class MakeCrudCommand extends Command
         }
 
         return implode(', ', $fillableArray);
+    }
+
+    protected function getRelationMethods($relations)
+    {
+        if (!$relations) return '';
+
+        $relationMethods = '';
+        $relationsArray = explode(',', $relations);
+
+        foreach ($relationsArray as $relation) {
+            [$type, $relatedModel, $foreignKey, $localKey] = explode(':', $relation);
+
+            switch ($type) {
+                case 'hasMany':
+                    $relationMethods .= $this->createHasManyMethod($relatedModel, $foreignKey, $localKey);
+                    break;
+                case 'belongsTo':
+                    $relationMethods .= $this->createBelongsToMethod($relatedModel, $foreignKey, $localKey);
+                    break;
+                case 'belongsToMany':
+                    $relationMethods .= $this->createBelongsToManyMethod($relatedModel, $foreignKey, $localKey);
+                    break;
+                case 'hasOne':
+                    $relationMethods .= $this->createHasOneMethod($relatedModel, $foreignKey, $localKey);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        return $relationMethods;
+    }
+
+    protected function createHasManyMethod($relatedModel, $foreignKey, $localKey)
+    {
+        return "
+    public function " . Str::plural(Str::camel($relatedModel)) . "()
+    {
+        return \$this->hasMany($relatedModel::class, '$foreignKey', '$localKey');
+    }\n";
+    }
+
+    protected function createBelongsToMethod($relatedModel, $foreignKey, $localKey)
+    {
+        return "
+    public function " . Str::camel($relatedModel) . "()
+    {
+        return \$this->belongsTo($relatedModel::class, '$foreignKey', '$localKey');
+    }\n";
+    }
+
+    protected function createBelongsToManyMethod($relatedModel, $foreignKey, $localKey)
+    {
+        return "
+    public function " . Str::plural(Str::camel($relatedModel)) . "()
+    {
+        return \$this->belongsToMany($relatedModel::class, '$foreignKey', '$localKey');
+    }\n";
+    }
+
+    protected function createHasOneMethod($relatedModel, $foreignKey, $localKey)
+    {
+        return "
+    public function " . Str::camel($relatedModel) . "()
+    {
+        return \$this->hasOne($relatedModel::class, '$foreignKey', '$localKey');
+    }\n";
     }
 
     protected function createMigration($name, $fields)
