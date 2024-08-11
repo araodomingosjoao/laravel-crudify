@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\{{modelName}};
+use App\Http\Requests\{{storeRequestName}};
+use App\Http\Requests\{{updateRequestName}};
 use Illuminate\Http\Request;
 
 class {{controllerName}} extends Controller
@@ -18,13 +20,9 @@ class {{controllerName}} extends Controller
         return view('{{modelVariable}}.create');
     }
 
-    public function store(Request $request)
+    public function store({{storeRequestName}} $request)
     {
-        $data = $request->validate([
-            // Adicione validações baseadas nos campos
-        ]);
-
-        {{modelName}}::create($data);
+        {{modelName}}::create($request->validated());
         return redirect()->route('{{modelVariable}}.index');
     }
 
@@ -38,13 +36,9 @@ class {{controllerName}} extends Controller
         return view('{{modelVariable}}.edit', compact('{{modelVariable}}'));
     }
 
-    public function update(Request $request, {{modelName}} ${{modelVariable}})
+    public function update({{updateRequestName}} $request, {{modelName}} ${{modelVariable}})
     {
-        $data = $request->validate([
-            // Adicione validações baseadas nos campos
-        ]);
-
-        ${{modelVariable}}->update($data);
+        ${{modelVariable}}->update($request->validated());
         return redirect()->route('{{modelVariable}}.index');
     }
 

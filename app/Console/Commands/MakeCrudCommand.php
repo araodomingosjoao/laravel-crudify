@@ -8,20 +8,27 @@ use Illuminate\Support\Str;
 
 class MakeCrudCommand extends Command
 {
-    protected $signature = 'make:crud {name} {--fields=} {--relations=}';
+    protected $signature = 'make:crud
+                            {name}
+                            {--fields=}
+                            {--relations=}
+                            {--creation-rules=}
+                            {--update-rules=}';
+                            
     protected $description = 'Create CRUD operations for a model, including migrations, controllers, and views.';
 
     public function handle()
     {
         $name = $this->argument('name');
         $fields = $this->option('fields');
-
         $relations = $this->option('relations');
 
         $this->createModel($name, $fields, $relations);
         $this->createMigration($name, $fields, $relations);
         $this->createController($name);
+        $this->createRequests($name, $fields);
         $this->createViews($name);
+
         $this->info('CRUD for ' . $name . ' created successfully.');
     }
 
@@ -206,20 +213,75 @@ class MakeCrudCommand extends Command
     protected function createController($name)
     {
         $controllerName = $name . 'Controller';
+        $storeRequestName = $name . 'StoreRequest';
+        $updateRequestName = $name . 'UpdateRequest';
+
         Artisan::call('make:controller', ['name' => $controllerName]);
 
         $controllerPath = app_path("Http/Controllers/{$controllerName}.php");
-        $modelVariable = strtolower($name);
-        $modelName = $name;
         $controllerTemplate = file_get_contents(resource_path('stubs/controller.stub'));
 
         $controllerTemplate = str_replace(
-            ['{{controllerName}}', '{{modelName}}', '{{modelVariable}}'],
-            [$controllerName, $modelName, $modelVariable],
+            ['{{controllerName}}', '{{modelName}}', '{{modelVariable}}', '{{storeRequestName}}', '{{updateRequestName}}'],
+            [$controllerName, $name, strtolower($name), $storeRequestName, $updateRequestName],
             $controllerTemplate
         );
 
         file_put_contents($controllerPath, $controllerTemplate);
+    }
+
+    protected function createRequests($name, $fields)
+    {
+        $storeRules = $this->generateValidationRules($fields, true);
+        $updateRules = $this->generateValidationRules($fields, false);
+
+        $this->createRequest('StoreRequest', $storeRules, $name);
+        $this->createRequest('UpdateRequest', $updateRules, $name);
+    }
+
+    protected function generateValidationRules($fields, $isCreation)
+    {
+        $rules = [];
+        $fieldsArray = explode(',', $fields);
+
+        foreach ($fieldsArray as $field) {
+            [$fieldName, $fieldType] = explode(':', $field);
+            $rules[$fieldName] = $this->getFieldRules($fieldType, $isCreation);
+        }
+
+        return $rules;
+    }
+
+    protected function getFieldRules($fieldType, $isCreation)
+    {
+        $rules = $isCreation ? ['required', $fieldType] : ['nullable', $fieldType];
+    
+        return implode('|', $rules);
+    }
+    
+    protected function createRequest($stubName, $rules, $modelName)
+    {
+        $requestPath = app_path("Http/Requests/{$modelName}{$stubName}.php");
+        $stubPath = resource_path("stubs/{$stubName}.stub");
+
+        if (!file_exists($stubPath)) {
+            $this->error("Stub file not found: {$stubPath}");
+            return;
+        }
+
+        $requestTemplate = file_get_contents($stubPath);
+
+        $rulesFormatted = collect($rules)->map(function ($rule, $field) {
+            return "'{$field}' => '{$rule}'";
+        })->implode(",\n            ");
+
+        $requestTemplate = str_replace(
+            ['{{formRequestName}}', '{{rules}}'],
+            ["{$modelName}{$stubName}", $rulesFormatted],
+            $requestTemplate
+        );
+
+        file_put_contents($requestPath, $requestTemplate);
     }
 
     protected function createViews($name)
