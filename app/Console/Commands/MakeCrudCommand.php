@@ -19,7 +19,7 @@ class MakeCrudCommand extends Command
         $relations = $this->option('relations');
 
         $this->createModel($name, $fields, $relations);
-        $this->createMigration($name, $fields);
+        $this->createMigration($name, $fields, $relations);
         $this->createController($name);
         $this->createViews($name);
         $this->info('CRUD for ' . $name . ' created successfully.');
@@ -124,34 +124,83 @@ class MakeCrudCommand extends Command
     }\n";
     }
 
-    protected function createMigration($name, $fields)
+    protected function createMigration($name, $fields, $relations)
     {
-        $tableName = Str::plural(Str::snake($name));
-        $migrationName = 'create_' . $tableName . '_table';
+        Artisan::call('make:migration', ['name' => "create_".Str::plural(Str::snake($name))."_table"]);
 
-        Artisan::call('make:migration', [
-            'name' => $migrationName,
-            '--create' => $tableName
-        ]);
-
-        $migrationPath = base_path('database/migrations/') . date('Y_m_d_His') . '_' . $migrationName . '.php';
-
-        $fieldsArray = explode(',', $fields);
-        $fieldsSchema = '';
-
-        foreach ($fieldsArray as $field) {
-            [$fieldName, $type] = explode(':', $field);
-            $fieldsSchema .= "\$table->$type('$fieldName');\n            ";
-        }
+        $migrationPath = base_path('database/migrations/');
+        $migrationFile = $this->getLatestMigrationFile($migrationPath, "create_".Str::plural(Str::snake($name))."_table");
 
         $migrationTemplate = file_get_contents(resource_path('stubs/migration.stub'));
         $migrationTemplate = str_replace(
             ['{{tableName}}', '{{fields}}'],
-            [$tableName, $fieldsSchema],
+            [Str::plural(Str::snake($name)), $this->getMigrationFields($fields)],
             $migrationTemplate
         );
 
-        file_put_contents($migrationPath, $migrationTemplate);
+        file_put_contents($migrationPath.'/'.$migrationFile, $migrationTemplate);
+
+        $this->createPivotTables($relations);
+    }
+
+    protected function getMigrationFields($fields)
+    {
+        $fieldsArray = explode(',', $fields);
+        $migrationFields = [];
+
+        foreach ($fieldsArray as $field) {
+            [$fieldName, $fieldType] = explode(':', $field);
+            $migrationFields[] = "\$table->$fieldType('$fieldName');";
+        }
+
+        return implode("\n\t\t\t", $migrationFields);
+    }
+
+    protected function createPivotTables($relations)
+    {
+        if (!$relations) return;
+
+        $relationsArray = explode(',', $relations);
+
+        foreach ($relationsArray as $relation) {
+            [$type, $relatedModel, $foreignKey, $localKey] = explode(':', $relation);
+
+            if ($type === 'belongsToMany') {
+                $pivotTableName = $this->getPivotTableName($relatedModel, $foreignKey);
+                Artisan::call('make:migration', ['name' => "create_{$pivotTableName}_table"]);
+
+                $migrationPath = base_path('database/migrations/');
+                $migrationFile = $this->getLatestMigrationFile($migrationPath, "create_{$pivotTableName}_table");
+
+                $pivotMigrationTemplate = file_get_contents(resource_path('stubs/pivot_migration.stub'));
+                $pivotMigrationTemplate = str_replace(
+                    ['{{pivotTableName}}', '{{foreignKey}}', '{{relatedKey}}'],
+                    [$pivotTableName, $foreignKey, $localKey],
+                    $pivotMigrationTemplate
+                );
+
+                file_put_contents($migrationPath.'/'.$migrationFile, $pivotMigrationTemplate);
+            }
+        }
+    }
+
+    protected function getPivotTableName($relatedModel, $modelName)
+    {
+        $model = Str::snake(Str::singular(class_basename($modelName)));
+        $related = Str::snake(Str::singular(class_basename($relatedModel)));
+
+        return collect([$model, $related])->sort()->implode('_');
+    }
+
+    protected function getLatestMigrationFile($migrationPath, $fileName)
+    {
+        $files = scandir($migrationPath, SCANDIR_SORT_DESCENDING);
+        foreach ($files as $file) {
+            if (str_contains($file, $fileName)) {
+                return $file;
+            }
+        }
+        return null;
     }
 
     protected function createController($name)
