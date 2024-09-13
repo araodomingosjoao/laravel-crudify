@@ -5686,7 +5686,7 @@
             "dist": {
                 "type": "path",
                 "url": "./packages/araodomingos/crudify",
-                "reference": "bc7649dc0dc07935e00cbc1f06700d231bf2aea8"
+                "reference": "ef035bd0a963613dddfb73aa55ab96bce9626306"
             },
             "require": {
                 "php": "^7.3|^8.0"
