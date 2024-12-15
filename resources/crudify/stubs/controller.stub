@@ -1,0 +1,52 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\{{modelName}};
+use App\Http\Requests\{{storeRequestName}};
+use App\Http\Requests\{{updateRequestName}};
+use Illuminate\Http\Request;
+
+class {{controllerName}} extends Controller
+{
+    public function index()
+    {
+        ${{modelVariable}}s = {{modelName}}{{softDeletesQuery}}->get();
+        return view('{{modelVariable}}.index', compact('{{modelVariable}}s'));
+    }
+
+    public function create()
+    {
+        return view('{{modelVariable}}.create');
+    }
+
+    public function store({{storeRequestName}} $request)
+    {
+        {{modelName}}::create($request->validated());
+        return redirect()->route('{{modelVariable}}.index');
+    }
+
+    public function show({{modelName}} ${{modelVariable}})
+    {
+        return view('{{modelVariable}}.show', compact('{{modelVariable}}'));
+    }
+
+    public function edit({{modelName}} ${{modelVariable}})
+    {
+        return view('{{modelVariable}}.edit', compact('{{modelVariable}}'));
+    }
+
+    public function update({{updateRequestName}} $request, {{modelName}} ${{modelVariable}})
+    {
+        ${{modelVariable}}->update($request->validated());
+        return redirect()->route('{{modelVariable}}.index');
+    }
+
+    public function destroy({{modelName}} ${{modelVariable}})
+    {
+        ${{modelVariable}}->delete();
+        return redirect()->route('{{modelVariable}}.index');
+    }
+
+    {{softDeletesMethods}}
+}
